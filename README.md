@@ -1,4 +1,4 @@
-# huawai-api
+# huawei-api
 inspired from wolfgar/huawai-api
 
 # Introduction
