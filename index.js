@@ -38,20 +38,26 @@ module.exports =
       return objectMap(response, val => val[0])
     }
 
-    async apiRequest(path, requestData) {
+    async apiRequest(path, requestData, session) {
+      if (session === undefined) {
+        session = true
+      }
 
       let requestXml = builder.buildObject(requestData)
-      debug('apiPost, request', path, requestXml)
+      debug('apiRequest, request', path, requestXml)
+
+      let headers = {}
+      headers['Content-Type'] = 'text/xml'
+      if (session) {
+        headers['__RequestVerificationToken'] = await this.getToken()
+      }
 
       let responseXml = await this._request({
         url: 'http://' + this.host + path,
         body: requestXml,
-        headers: {
-          'Content-Type': 'text/xml',
-          '__RequestVerificationToken': await this.getToken()
-        }
+        headers: headers
       })
-      debug('apiPost, response', responseXml)
+      debug('apiRequest, response', responseXml)
       let {
         response
       } = await parseXml(responseXml)
@@ -117,20 +123,25 @@ module.exports =
       requestData.request.firstnonce = clientnonce
       requestData.request.mode = 1
 
-      let loginData = await this.apiPost('/api/user/challenge_login', requestData)
-      debug('login, loginData', loginData)
+      try {
+        let loginData = await this.apiPost('/api/user/challenge_login', requestData)
+        debug('login, loginData', loginData)
 
-      let proof = this.getClientProof(clientnonce, loginData.servernonce, password, loginData.salt, loginData.iterations * 1)
-      requestData = {}
-      requestData.request = {}
-      requestData.request.clientproof = proof
-      requestData.request.finalnonce = loginData.servernonce
-      debug('authentication_login, requestData', requestData)
-      let loginResult = await this.apiPost('/api/user/authentication_login', requestData)
-      debug('login, loginResult', loginResult)
+        let proof = this.getClientProof(clientnonce, loginData.servernonce, password, loginData.salt, loginData.iterations * 1)
+        requestData = {}
+        requestData.request = {}
+        requestData.request.clientproof = proof
+        requestData.request.finalnonce = loginData.servernonce
+        debug('authentication_login, requestData', requestData)
+        let loginResult = await this.apiPost('/api/user/authentication_login', requestData)
+        debug('login, loginResult', loginResult)
 
-      let stateLogiResult = await this.apiRequest('/api/user/state-login', {})
-      debug('login, stateLogiResult', stateLogiResult)
+        let stateLoginResult = await this.apiRequest('/api/user/state-login', {})
+        debug('login, stateLoginResult', stateLoginResult)
+        return true
+      } catch (err) {
+        return false
+      }
     }
 
     async sendSms(number, message) {
@@ -146,8 +157,37 @@ module.exports =
       requestData.request.Date = moment().format('YYYY-MM-DD HH:mm:ss')
 
       debug('sendSms, requestData', requestData)
-      let sendSmsResponse = await this.apiPost('/api/sms/send-sms', requestData)
-      debug('sendSms, sendSmsResponse', sendSmsResponse)
+      try {
+        let sendSmsResponse = await this.apiPost('/api/sms/send-sms', requestData)
+        debug('sendSms, sendSmsResponse', sendSmsResponse)
+        return true
+      } catch (err) {
+        return false
+      }
+    }
+
+    async deviceInfo() {
+      let requestData = {}
+      debug('deviceInfo, requestData', requestData)
+      try {
+        let response = await this.apiRequest('/api/device/basic_information', requestData, false)
+        debug('deviceInfo, response', response)
+        return response
+      } catch (err) {
+        return false
+      }
+    }
+
+    async stateLogin() {
+      let requestData = {}
+      debug('stateLogin, requestData', requestData)
+      try {
+        let response = await this.apiRequest('/api/user/state-login', requestData)
+        debug('stateLogin, response', response)
+        return response
+      } catch (err) {
+        return false
+      }
     }
 
     getUuid() {
